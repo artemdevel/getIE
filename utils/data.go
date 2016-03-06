@@ -1,4 +1,4 @@
-// Data related functions like download or parse
+// Data related functions
 package utils
 
 import (

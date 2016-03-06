@@ -27,6 +27,10 @@ func main() {
 		user_choice.DownloadPath = utils.SelectOption(
 			utils.GetDownloadPaths(), "Select download path", "All", utils.GetDefaultDownloadPath)
 		utils.ConfirmUsersChoice(user_choice)
+
+		vm_archive := utils.DownloadVm(user_choice)
+		vm_path := utils.UnzipVm(vm_archive)
+		utils.InstallVm(user_choice.Spec.Hypervisor, vm_path)
 	} else {
 		// TODO: process command-line args
 	}
