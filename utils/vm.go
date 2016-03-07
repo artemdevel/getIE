@@ -139,6 +139,8 @@ func vm_file_path(hypervisor string, collected_paths []string) string {
 	search := ""
 	if hypervisor == "VirtualBox" {
 		search = ".ova"
+	} else if hypervisor == "VMware" {
+		search = ".ovf"
 	} else {
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 		return ""
@@ -204,19 +206,21 @@ func UnzipVm(uc UserChoice) string {
 	return vm_file_path(uc.Hypervisor, collected_paths)
 }
 
-func check_virtualbox() error {
+func virtualbox_check() error {
+	fmt.Println("Checking VirtualBox installation..")
 	cmd_name := "vboxmanage"
 	cmd_args := []string{"--version"}
 	if version, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
-		fmt.Println("VirtualBox not found. Aborting.")
+		fmt.Println("vboxmanage not found. Aborting.")
 		return err
 	} else {
-		fmt.Println("Detected VirtualBox version", string(version))
+		fmt.Println("Detected vboxmanage version", string(version))
 	}
 	return nil
 }
 
 func virtualbox_import_vm(vm_path string) {
+	// TODO: remove syscall.Exec because it isn't portable
 	binary, err := exec.LookPath("vboxmanage")
 	if err != nil {
 		panic(err)
@@ -228,12 +232,93 @@ func virtualbox_import_vm(vm_path string) {
 	}
 }
 
+func vmware_check() error {
+	fmt.Println("Checking VMware installation..")
+	cmd_name := "ovftool"
+	cmd_args := []string{"--version"}
+	if version, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
+		fmt.Println("ovftool not found. Aborting.")
+		return err
+	} else {
+		fmt.Println("Detected", string(version))
+	}
+
+	// NOTE: vmrun doesn't have --help or --version or similar options.
+	// Without any parameters it exits with status code 255 and help text
+	cmd_name = "vmrun"
+	if version, err := exec.Command(cmd_name).Output(); fmt.Sprintf("%s", err) != "exit status 255" {
+		fmt.Println("vmrun not found. Aborting.")
+		return err
+	} else {
+		fmt.Println("Detected", strings.Split(string(version), "\n")[1])
+	}
+	return nil
+}
+
+// VMware require .vmx file to run a VM but only .ovf is provided
+func vmware_convert_ovf(ovf_path string) (string, error) {
+	vmx_path := strings.Replace(ovf_path, ".ovf", ".vmx", 1)
+	fmt.Printf("Convert %s to %s\n", ovf_path, vmx_path)
+	fmt.Println("Please wait")
+
+	cmd_name := "ovftool"
+	cmd_args := []string{ovf_path, vmx_path}
+	if result, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
+		return "", err
+	} else {
+		fmt.Println(string(result))
+	}
+	return vmx_path, nil
+}
+
+// Provided VMware VM doesn't have network adapter
+func vmware_fix_vmx(vmx_path string) {
+	if vmx_file, err := os.Stat(vmx_path); err == nil {
+		if vmx_file, err := os.OpenFile(vmx_path, os.O_APPEND|os.O_WRONLY, vmx_file.Mode()); err == nil {
+			vmx_file.WriteString("ethernet0.present = \"TRUE\"\n")
+			vmx_file.WriteString("ethernet0.connectionType = \"nat\"\n")
+			vmx_file.WriteString("ethernet0.wakeOnPcktRcv = \"FALSE\"\n")
+			vmx_file.WriteString("ethernet0.addressType = \"generated\"\n")
+			vmx_file.Close()
+		}
+	}
+}
+
+// Looks like VMware runvm command doesn't have anything like import, so I start and stop a VM.
+// Also, if runvm starts a VM with nogui option such VM isn't added to the list for some reason.
+func vmware_import_vm(vmx_path string) error {
+	fmt.Printf("Starting %s VM\n", vmx_path)
+	cmd_name1 := "vmrun"
+	cmd_args1 := []string{"start", vmx_path}
+	if _, err := exec.Command(cmd_name1, cmd_args1...).Output(); err != nil {
+		return err
+	}
+
+	fmt.Printf("Stopping %s VM\n", vmx_path)
+	cmd_name2 := "vmrun"
+	cmd_args2 := []string{"stop", vmx_path}
+	if _, err := exec.Command(cmd_name2, cmd_args2...).Output(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Install unpacked VM into selected hypervisor
 func InstallVm(hypervisor string, vm_path string) {
 	if hypervisor == "VirtualBox" {
-		if err := check_virtualbox(); err == nil {
+		if err := virtualbox_check(); err == nil {
 			virtualbox_import_vm(vm_path)
 		}
+	} else if hypervisor == "VMware" {
+		if err := vmware_check(); err != nil {
+			os.Exit(1)
+		}
+		vmx_path, err := vmware_convert_ovf(vm_path)
+		if err != nil {
+			os.Exit(1)
+		}
+		vmware_fix_vmx(vmx_path)
+		vmware_import_vm(vmx_path)
 	} else {
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 	}
