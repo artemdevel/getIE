@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 	"regexp"
 	"encoding/json"
-"strings"
+	"strings"
 	"runtime"
 	"path"
 	"os"
@@ -38,7 +38,7 @@ type JsonData struct {
 }
 
 // Available choices
-type Choice map[int]string
+type Choice []string
 
 // Choices grouped by other choices
 type ChoiceGroups map[string]Choice
@@ -70,6 +70,10 @@ type UserChoice struct {
 
 // Default option selector function
 type DefaultChoice func(choices Choice) int
+
+func (ch Choice) Len() int { return len(ch) }
+func (ch Choice) Less(i, j int) bool { return ch[i] < ch[j] }
+func (ch Choice) Swap(i, j int) { ch[i], ch[j] = ch[j], ch[i] }
 
 func DownloadJson(page_url string) []byte {
 	// In truth this page is regular HTML page but it has JSON data which is
@@ -105,37 +109,25 @@ func ParseJson(raw_data *[]byte) (
 	browsers = make(ChoiceGroups)
 	available_vms = make(AvailableVms)
 
-	for h_idx, software := range data.SoftwareList {
+	for _, software := range data.SoftwareList {
 		hypervisor := software.SoftwareName
 		if hypervisor == "Vagrant" {
 			// skip Vagrant because it isn't a hypervisor
 			continue
 		}
 
-		for os_idx, platform := range software.OsList {
-			_, ok1 := platforms["All"]
-			if !ok1 {
-				platforms["All"] = make(Choice)
-			}
-			_, ok2 := seen_platforms[platform]
-			if !ok2 {
+		for _, platform := range software.OsList {
+			_, ok := seen_platforms[platform]
+			if !ok {
 				seen_platforms[platform] = true
-				platforms["All"][os_idx] = platform
+				platforms["All"] = append(platforms["All"], platform)
 			}
-			_, ok3 := hypervisors[platform]
-			if !ok3 {
-				hypervisors[platform] = make(Choice)
-			}
-			hypervisors[platform][h_idx] = hypervisor
+			hypervisors[platform] = append(hypervisors[platform], hypervisor)
 		}
 
-		for b_idx, browser := range software.Vms {
+		for _, browser := range software.Vms {
 			browser_os := strings.Join([]string{browser.BrowserName, browser.OsVersion}, " ")
-			_, ok := browsers[hypervisor]
-			if !ok {
-				browsers[hypervisor] = make(Choice)
-			}
-			browsers[hypervisor][b_idx] = browser_os
+			browsers[hypervisor] = append(browsers[hypervisor], browser_os)
 			for _, file := range browser.Files {
 				if file.Md5 != "" {
 					vm := VmImage{FileURL: file.URL, Md5URL: file.Md5}
@@ -176,10 +168,9 @@ func get_working_path() string {
 
 func GetDownloadPaths() ChoiceGroups {
 	choices := make(ChoiceGroups)
-	choices["All"] = make(Choice)
-	for path_idx, download_path := range []string{get_working_path(), get_download_path()} {
+	for _, download_path := range []string{get_working_path(), get_download_path()} {
 		if download_path != "" {
-			choices["All"][path_idx+1] = download_path
+			choices["All"] = append(choices["All"], download_path)
 		}
 	}
 	return choices
@@ -210,7 +201,7 @@ func GetDefaultHypervisor(choices Choice) int {
 
 func GetDefaultBrowser(choices Choice) int {
 	// Consider the latest browser is the newest
-	return len(choices)
+	return len(choices) - 1
 }
 
 func GetDefaultDownloadPath(choices Choice) int {

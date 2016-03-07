@@ -1,8 +1,8 @@
 package main
 
 import (
-	"os"
 	"./utils"
+	"os"
 )
 
 var BuildRev string

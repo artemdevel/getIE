@@ -8,6 +8,7 @@ import (
 	"strings"
 	"runtime"
 	"strconv"
+	"sort"
 )
 
 // Show application's greeting banner
@@ -45,32 +46,27 @@ func EnterToContinue() {
 func SelectOption(choices ChoiceGroups, group_msg, group_name string, default_choice_func DefaultChoice) string {
 	reader := bufio.NewReader(os.Stdin)
 	defer fmt.Println()
-	// normalize choices
-	norm_choices := make(map[int]string)
-	idx := 1
-	for _, option := range choices[group_name] {
-		norm_choices[idx] = option
-		idx++
-	}
-	default_choice := default_choice_func(norm_choices)
-	for choice, option := range norm_choices {
+
+	sorted_choices := choices[group_name]
+	sort.Sort(sorted_choices)
+	default_choice := default_choice_func(sorted_choices)
+	for choice, option := range sorted_choices {
 		fmt.Println(choice, option)
 	}
 	for {
 		fmt.Printf("%s [%d]: ", group_msg, default_choice)
 		text, _ := reader.ReadString('\n')
 		if text == "\n" {
-			return norm_choices[default_choice]
+			return sorted_choices[default_choice]
 		}
 		selected, err := strconv.Atoi(strings.TrimSpace(text))
 		if err != nil {
 			continue
 		}
-		_, ok := norm_choices[selected]
-		if !ok {
+		if selected < 0 || selected > len(sorted_choices) {
 			continue
 		}
-		return norm_choices[selected]
+		return sorted_choices[selected]
 	}
 }
 
