@@ -32,12 +32,12 @@ func YesNoConfirmation(msg string) {
 }
 
 // Press ENTER to continue
-func EnterToContinue() {
+func EnterToContinue(msg string) {
 	reader := bufio.NewReader(os.Stdin)
 	if runtime.GOOS == "darwin" {
-		fmt.Println("Press ENTER to continue CMD-C to abort")
+		fmt.Printf("%s. Press ENTER to continue CMD-C to abort\n", msg)
 	} else {
-		fmt.Println("Press ENTER to continue CTRL-C to abort")
+		fmt.Printf("%s. Press ENTER to continue CTRL-C to abort\n", msg)
 	}
 	reader.ReadString('\n')
 }

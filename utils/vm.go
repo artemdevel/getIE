@@ -13,6 +13,7 @@ import (
 	"archive/zip"
 	"os/exec"
 	"syscall"
+	"strings"
 )
 
 const DOWNLOAD_STEP = 0.5
@@ -70,7 +71,7 @@ func get_orig_md5(vm VmImage) string {
 
 func compare_md5(md5str1, md5str2 string) {
 	if md5str1 != md5str2 {
-		fmt.Println("MD5 sum doesn't match. Exiting.")
+		fmt.Println("MD5 sum doesn't match. Aborting.")
 		os.Exit(1)
 	} else {
 		fmt.Println("MD5 sum matches.")
@@ -81,6 +82,7 @@ func compare_md5(md5str1, md5str2 string) {
 func DownloadVm(uc UserChoice) string {
 	// TODO: during download add .part extension to the downloaded file
 	// TODO: add check for .part file for resumable downloads
+	// TODO: return error instead of panic()
 	vm_file := path.Join(uc.DownloadPath, path.Base(uc.VmImage.FileURL))
 	fmt.Printf("Prepare to download %s to %s\n", uc.VmImage.FileURL, vm_file)
 
@@ -129,68 +131,89 @@ func DownloadVm(uc UserChoice) string {
 		fmt.Printf("Downloaded file MD5 sum %s\n", vm_md5)
 		compare_md5(orig_md5, vm_md5)
 	}
-	EnterToContinue()
 	return vm_file
 }
 
+// Get exact file path depending on a hypervisor
+func vm_file_path(hypervisor string, collected_paths []string) string {
+	search := ""
+	if hypervisor == "VirtualBox" {
+		search = ".ova"
+	} else {
+		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
+		return ""
+	}
+	for _, vm_path := range collected_paths {
+		if strings.HasSuffix(vm_path, search) {
+			return vm_path
+		}
+	}
+	// TODO: return error if found nothing
+	return ""
+}
+
 // Unzip downloaded VM
-func UnzipVm(vm_path string) string {
-	// TODO: check if destination folder exists
-	// TODO: support folders and multiple files because VirtualBox has a single file
-	// TODO: the code must be rewritten to unpack all files into some folder and this folder must be returned
-	// TODO: each hypervisor requires its own specific files as a start point so just a folder path isn't enough
-	zip_file, err := zip.OpenReader(vm_path)
+func UnzipVm(uc UserChoice) string {
+	vm_path := path.Join(uc.DownloadPath, path.Base(uc.VmImage.FileURL))
+	zip_reader, err := zip.OpenReader(vm_path)
 	if err != nil {
 		panic(err)
 	}
-	defer zip_file.Close()
+	defer zip_reader.Close()
 
-	dst_path := path.Dir(vm_path)
-	for _, file := range zip_file.File {
+	unzip_folder := path.Join(uc.DownloadPath, path.Base(uc.VmImage.FileURL))
+	unzip_folder_parts := strings.Split(unzip_folder, ".")
+	unzip_folder = strings.Join(unzip_folder_parts[:len(unzip_folder_parts)-1], ".")
+	if _, err := os.Stat(unzip_folder); os.IsNotExist(err) {
+		if err := os.Mkdir(unzip_folder, 0755); err != nil {
+			panic(err)
+		}
+	}
+	fmt.Printf("Unpack data into %s\n", unzip_folder)
+
+	var collected_paths []string
+	for _, file := range zip_reader.File {
+		fmt.Printf("Unpacking '%s'\n", file.Name)
+		file_path := path.Join(unzip_folder, file.Name)
+		if file.FileInfo().IsDir() {
+			os.MkdirAll(file_path, file.Mode())
+			continue
+		}
+
+		// Collected paths are required because each hypervisor has its own entry point file.
+		// For example, VirtualBox needs .ova file, VMware needs .vmdk file and Hyper-V needs .xml file etc
+		collected_paths = append(collected_paths, file_path)
+
 		file_reader, err := file.Open()
 		if err != nil {
 			panic(err)
 		}
 		defer file_reader.Close()
 
-		fmt.Printf("Unpacking '%s' to %s\n", file.Name, dst_path)
-		dst_file := path.Join(dst_path, file.Name)
-		vm_file, err := os.Create(dst_file)
+		target_file, err := os.OpenFile(file_path, os.O_WRONLY|os.O_CREATE|os.O_CREATE, file.Mode())
 		if err != nil {
 			panic(err)
 		}
-		defer vm_file.Close()
+		defer target_file.Close()
 
 
-		if _, err := io.Copy(vm_file, file_reader); err != nil {
+		if _, err := io.Copy(target_file, file_reader); err != nil {
 			panic(err)
 		}
-		fmt.Println("Unpacking finished")
-		EnterToContinue()
-		return dst_file
 	}
-	return ""
+	return vm_file_path(uc.Hypervisor, collected_paths)
 }
 
-func check_virtualbox() {
+func check_virtualbox() error {
 	cmd_name := "vboxmanage"
 	cmd_args := []string{"--version"}
 	if version, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
-		panic(err)
+		fmt.Println("VirtualBox not found. Aborting.")
+		return err
 	} else {
 		fmt.Println("Detected VirtualBox version", string(version))
 	}
-}
-
-func virtualbox_list_vms() {
-	cmd_name := "vboxmanage"
-	cmd_args := []string{"list", "vms"}
-	if cmd_output, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
-		panic(err)
-	} else {
-		fmt.Println("Existed VirtualBox VMs")
-		fmt.Println(string(cmd_output))
-	}
+	return nil
 }
 
 func virtualbox_import_vm(vm_path string) {
@@ -206,22 +229,12 @@ func virtualbox_import_vm(vm_path string) {
 }
 
 // Install unpacked VM into selected hypervisor
-func InstallVm(vm_hypervisor string, vm_path string) {
-	switch vm_hypervisor {
-	case "VirtualBox":
-		check_virtualbox()
-		virtualbox_list_vms()
-		EnterToContinue()
-		virtualbox_import_vm(vm_path)
-	case "HyperV":
-		fmt.Println("HyperV hypervisor isn't supported yet. Exiting..")
-	case "VPC":
-		fmt.Println("VPC hypervisor isn't supported yet. Exiting..")
-	case "VMware":
-		fmt.Println("VMware hypervisor isn't supported yet. Exiting..")
-	case "Parallels":
-		fmt.Println("Parallels hypervisor isn't supported yet. Exiting..")
-	default:
-		fmt.Printf("Unknown hypervisor %s. Exiting..\n", vm_hypervisor)
+func InstallVm(hypervisor string, vm_path string) {
+	if hypervisor == "VirtualBox" {
+		if err := check_virtualbox(); err == nil {
+			virtualbox_import_vm(vm_path)
+		}
+	} else {
+		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 	}
 }

@@ -71,6 +71,7 @@ type UserChoice struct {
 // Default option selector function
 type DefaultChoice func(choices Choice) int
 
+
 func (ch Choice) Len() int { return len(ch) }
 func (ch Choice) Less(i, j int) bool { return ch[i] < ch[j] }
 func (ch Choice) Swap(i, j int) { ch[i], ch[j] = ch[j], ch[i] }
