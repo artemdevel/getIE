@@ -16,14 +16,13 @@ import (
 	"strings"
 )
 
-const DOWNLOAD_STEP = 0.5
-
 // Wrapper to track download progress
 type ProgressWrapper struct {
 	io.Reader
 	total    int64
 	size     int64
 	progress float64
+	step     float64
 }
 
 // Wrapper to calculate md5 sum of the downloaded
@@ -38,7 +37,7 @@ func (pw *ProgressWrapper) Read(p []byte) (int, error) {
 		pw.total += int64(n)
 		progress := float64(pw.total) / float64(pw.size) * float64(100)
 		// Show progress for each N%
-		if progress- pw.progress > DOWNLOAD_STEP {
+		if progress-pw.progress > pw.step {
 			fmt.Printf("Downloaded %.2f%%\r", progress)
 			pw.progress = progress
 		} else if pw.total == pw.size {
@@ -121,7 +120,11 @@ func DownloadVm(uc UserChoice) string {
 		}
 		defer vm_resp.Body.Close()
 		fmt.Printf("File size %d bytes\n", vm_resp.ContentLength)
-		vm_src := &ProgressWrapper{Reader: vm_resp.Body, size: vm_resp.ContentLength}
+		vm_src := &ProgressWrapper{
+			Reader: vm_resp.Body,
+			size: vm_resp.ContentLength,
+			step: 0.1,
+		}
 
 		if _, err := io.Copy(new_file_md5, vm_src); err != nil {
 			panic(err)

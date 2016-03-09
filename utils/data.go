@@ -77,9 +77,8 @@ func (ch Choice) Less(i, j int) bool { return ch[i] < ch[j] }
 func (ch Choice) Swap(i, j int) { ch[i], ch[j] = ch[j], ch[i] }
 
 func DownloadJson(page_url string) []byte {
-	// In truth this page is regular HTML page but it has JSON data which is
-	// used to build IE version selection menus, so the whole page is downloaded
-	// and parsed by regexp to extract the actual JSON.
+	// page_url contains JSON which is used to build IE version selection menus,
+	// so the whole page is downloaded and parsed by regexp to extract the actual JSON.
 	fmt.Printf("Download JSON data from %s\n\n", page_url)
 	resp, err := http.Get(page_url)
 	if err != nil {
@@ -118,8 +117,7 @@ func ParseJson(raw_data *[]byte) (
 		}
 
 		for _, platform := range software.OsList {
-			_, ok := seen_platforms[platform]
-			if !ok {
+			if !seen_platforms[platform] {
 				seen_platforms[platform] = true
 				platforms["All"] = append(platforms["All"], platform)
 			}
