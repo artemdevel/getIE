@@ -12,10 +12,7 @@ script:
 deploy:
     provider: releases
     api_key: $GH_TOKEN
-    file:
-        - "$HOME/gopath/src/github.com/artemdevel/getIE/.build/getIE"
-        - "$HOME/gopath/src/github.com/artemdevel/getIE/.build/getIE.app"
-        - "$HOME/gopath/src/github.com/artemdevel/getIE/.build/getIE.exe"
+    file: "getIE.tgz"
     skip_cleanup: true
     on:
         tags: true
