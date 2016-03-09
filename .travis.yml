@@ -11,7 +11,7 @@ script:
 
 deploy:
     provider: releases
-    api_key: "$GH_TOKEN"
+    api_key: ${GH_TOKEN}
     file:
         - .build/getIE
         - .build/getIE.app
@@ -19,6 +19,5 @@ deploy:
     skip_cleanup: true
     on:
         tags:
-            - alpha
             - alpha-1.0.0
             - alpha-2.0.0
