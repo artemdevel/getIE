@@ -9,17 +9,13 @@ before_script: true
 script:
     - ./build_all.sh
 
-before_deploy:
-    - export DEBUG_LS=$(ls .build/)
-    - echo $DEBUG_LS
-
 deploy:
     provider: releases
     api_key: $GH_TOKEN
     file:
-        - .build/getIE
-        - .build/getIE.app
-        - .build/getIE.exe
+        - $HOME/gopath/src/github.com/artemdevel/getIE/.build/getIE
+        - $HOME/gopath/src/github.com/artemdevel/getIE/.build/getIE.app
+        - $HOME/gopath/src/github.com/artemdevel/getIE/.build/getIE.exe
     skip_cleanup: true
     on:
         tags: true
