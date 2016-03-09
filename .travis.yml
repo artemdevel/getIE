@@ -18,4 +18,7 @@ deploy:
         - .build/getIE.exe
     skip_cleanup: true
     on:
-        tags: true
+        tags:
+            - alpha
+            - alpha-1.0.0
+            - alpha-2.0.0
