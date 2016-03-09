@@ -8,3 +8,5 @@ before_script: true
 
 script:
     - ./build_all.sh
+
+deploy: true
