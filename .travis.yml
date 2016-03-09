@@ -3,5 +3,8 @@ language: go
 go:
     - 1.6
 
+install: true
+before_script: true
+
 script:
     - ./build_all.sh
