@@ -9,4 +9,13 @@ before_script: true
 script:
     - ./build_all.sh
 
-deploy: true
+deploy:
+	provider: releases
+	api_key: $GH_TOKEN
+	file:
+		- .build/getIE
+		- .build/getIE.app
+		- .build/getIE.exe
+	skip_cleanup: true
+	on:
+		tags: true
