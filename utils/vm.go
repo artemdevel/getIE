@@ -1,4 +1,4 @@
-// VM related functions
+// Hypervisors and VMs related functions
 package utils
 
 import (
@@ -12,7 +12,6 @@ import (
 	"crypto/md5"
 	"archive/zip"
 	"os/exec"
-	"syscall"
 	"strings"
 )
 
@@ -123,7 +122,8 @@ func DownloadVm(uc UserChoice) string {
 		vm_src := &ProgressWrapper{
 			Reader: vm_resp.Body,
 			size: vm_resp.ContentLength,
-			step: 0.1,
+			// progress download step for 1Mb chunks
+			step: float64(1024 * 1024) / float64(vm_resp.ContentLength) * float64(100),
 		}
 
 		if _, err := io.Copy(new_file_md5, vm_src); err != nil {
@@ -180,6 +180,11 @@ func UnzipVm(uc UserChoice) string {
 	for _, file := range zip_reader.File {
 		fmt.Printf("Unpacking '%s'\n", file.Name)
 		file_path := path.Join(unzip_folder, file.Name)
+		if _, err := os.Stat(file_path); err == nil {
+			collected_paths = append(collected_paths, file_path)
+			fmt.Printf("File '%s' already exist, skip\n", file_path)
+			continue
+		}
 		if file.FileInfo().IsDir() {
 			os.MkdirAll(file_path, file.Mode())
 			continue
@@ -213,60 +218,63 @@ func virtualbox_check() error {
 	fmt.Println("Checking VirtualBox installation..")
 	cmd_name := "vboxmanage"
 	cmd_args := []string{"--version"}
-	if version, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
-		fmt.Println("vboxmanage not found. Aborting.")
+	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+		fmt.Println(string(result), err)
 		return err
 	} else {
-		fmt.Println("Detected vboxmanage version", string(version))
+		fmt.Println("Detected vboxmanage version", string(result))
 	}
 	return nil
 }
 
-func virtualbox_import_vm(vm_path string) {
-	// TODO: remove syscall.Exec because it isn't portable
-	binary, err := exec.LookPath("vboxmanage")
-	if err != nil {
-		panic(err)
-	}
+func virtualbox_import_vm(vm_path string) error {
+	// NOTE: vboxmanage can import the same VM many times
+	fmt.Println("Import VM into VirtualBox. Please wait.")
+	cmd_name := "vboxmanage"
+	cmd_args := []string{"import", vm_path}
 
-	cmd_args := []string{"vboxmanage", "import", vm_path}
-	if err := syscall.Exec(binary, cmd_args, os.Environ()); err != nil {
-		panic(err)
+	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+		fmt.Println(string(result), err)
+		return err
+	} else {
+		fmt.Println(string(result))
 	}
+	return nil
 }
 
 func vmware_check() error {
 	fmt.Println("Checking VMware installation..")
 	cmd_name := "ovftool"
 	cmd_args := []string{"--version"}
-	if version, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
-		fmt.Println("ovftool not found. Aborting.")
+	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+		fmt.Println(string(result), err)
 		return err
 	} else {
-		fmt.Println("Detected", string(version))
+		fmt.Println("Detected", string(result))
 	}
 
 	// NOTE: vmrun doesn't have --help or --version or similar options.
 	// Without any parameters it exits with status code 255 and help text
 	cmd_name = "vmrun"
-	if version, err := exec.Command(cmd_name).Output(); fmt.Sprintf("%s", err) != "exit status 255" {
-		fmt.Println("vmrun not found. Aborting.")
+	if result, err := exec.Command(cmd_name).CombinedOutput(); fmt.Sprintf("%s", err) != "exit status 255" {
+		fmt.Println(string(result), err)
 		return err
 	} else {
-		fmt.Println("Detected", strings.Split(string(version), "\n")[1])
+		fmt.Println("Detected", strings.Split(string(result), "\n")[1])
 	}
 	return nil
 }
 
 // VMware require .vmx file to run a VM but only .ovf is provided
 func vmware_convert_ovf(ovf_path string) (string, error) {
+	// NOTE: ovftool fails if .vmx file exists
 	vmx_path := strings.Replace(ovf_path, ".ovf", ".vmx", 1)
-	fmt.Printf("Convert %s to %s\n", ovf_path, vmx_path)
-	fmt.Println("Please wait")
+	fmt.Printf("Convert %s to %s. Please wait.\n", ovf_path, vmx_path)
 
 	cmd_name := "ovftool"
 	cmd_args := []string{ovf_path, vmx_path}
-	if result, err := exec.Command(cmd_name, cmd_args...).Output(); err != nil {
+	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+		fmt.Println(string(result), err)
 		return "", err
 	} else {
 		fmt.Println(string(result))
