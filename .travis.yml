@@ -10,7 +10,8 @@ script:
     - ./build_all.sh
 
 before_deploy:
-    - echo $(ls .build/)
+    - export DEBUG_LS=$(ls .build/)
+    - echo $DEBUG_LS
 
 deploy:
     provider: releases
