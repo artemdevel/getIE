@@ -16,4 +16,4 @@ GOOS=darwin GOARCH=amd64 go build \
     -ldflags "-X main.BuildRev=$(git rev-parse --short HEAD)" \
     main.go
 
-tar -czf getIE.tgz -C .build/ .
+tar -czf getIE.tar.gz -C .build/ .
