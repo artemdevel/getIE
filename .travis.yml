@@ -11,7 +11,7 @@ script:
 
 deploy:
     provider: releases
-    api_key: "$GH_TOKEN"
+    api_key: $GH_TOKEN
     file:
         - .build/getIE
         - .build/getIE.app
