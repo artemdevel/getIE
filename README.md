@@ -5,3 +5,5 @@ Inspired by [Automated installation of the Microsoft IE App Compat virtual machi
 
 More information about IE virtual machines provided by Microsoft could be found [here](https://dev.windows.com/en-us/microsoft-edge/tools/vms/windows/)
 
+### Status
+[![Build Status](https://travis-ci.org/artemdevel/getIE.svg)](https://travis-ci.org/artemdevel/getIE)
