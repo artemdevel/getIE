@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path"
 	"regexp"
 	"runtime"
 	"strings"
@@ -146,11 +145,11 @@ func ParseJSON(rawData *[]byte) (
 func getDownloadPath() string {
 	switch runtime.GOOS {
 	case "linux":
-		return path.Join(os.Getenv("HOME"), "Downloads")
+		return pathJoin(os.Getenv("HOME"), "Downloads")
 	case "darwin":
-		return path.Join(os.Getenv("HOME"), "Downloads")
+		return pathJoin(os.Getenv("HOME"), "Downloads")
 	case "windows":
-		return path.Join(os.Getenv("USERPROFILE"), "Downloads")
+		return pathJoin(os.Getenv("USERPROFILE"), "Downloads")
 	default:
 		return ""
 	}

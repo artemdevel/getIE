@@ -22,6 +22,9 @@ func main() {
 			platforms, "Select platform", "All", utils.GetDefaultPlatform)
 		userChoice.Hypervisor = utils.SelectOption(
 			hypervisors, "Select hypervisor", userChoice.Platform, utils.GetDefaultHypervisor)
+		if userChoice.Hypervisor == "HyperV" {
+			utils.EnterToContinue("WARNING: For HyperV you must run this tool as Administrator")
+		}
 		userChoice.BrowserOs = utils.SelectOption(
 			browsers, "Select browser and OS", userChoice.Hypervisor, utils.GetDefaultBrowser)
 		userChoice.VMImage = availableVms[userChoice.Spec]

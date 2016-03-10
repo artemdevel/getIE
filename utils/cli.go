@@ -36,9 +36,9 @@ func YesNoConfirmation(msg string) {
 func EnterToContinue(msg string) {
 	reader := bufio.NewReader(os.Stdin)
 	if runtime.GOOS == "darwin" {
-		fmt.Printf("%s. Press ENTER to continue CMD-C to abort\n", msg)
+		fmt.Printf("%s. Press ENTER to continue CMD-C to abort.\n", msg)
 	} else {
-		fmt.Printf("%s. Press ENTER to continue CTRL-C to abort\n", msg)
+		fmt.Printf("%s. Press ENTER to continue CTRL-C to abort.\n", msg)
 	}
 	reader.ReadString('\n')
 }
@@ -57,7 +57,7 @@ func SelectOption(choices ChoiceGroups, groupMsg, groupName string, defaultChoic
 	for {
 		fmt.Printf("%s [%d]: ", groupMsg, defaultChoice)
 		text, _ := reader.ReadString('\n')
-		if text == "\n" {
+		if strings.TrimSpace(text) == "" {
 			return sortedChoices[defaultChoice]
 		}
 		selected, err := strconv.Atoi(strings.TrimSpace(text))

@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"runtime"
 )
 
 // ProgressWrapper type is used to track download progress.
@@ -77,12 +78,19 @@ func compareMd5(md5str1, md5str2 string) {
 	}
 }
 
+func pathJoin(path1, path2 string) string {
+	if runtime.GOOS == "windows" {
+		return strings.Replace(path.Join(path1, path2), "/", "\\", -1)
+	}
+	return path.Join(path1, path2)
+}
+
 // DownloadVM function downloads VM archive defined by a user and returns the path where it was stored.
 func DownloadVM(uc UserChoice) string {
 	// TODO: during download add .part extension to the downloaded file
 	// TODO: add check for .part file for resumable downloads
 	// TODO: return error instead of panic()
-	vmFile := path.Join(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
+	vmFile := pathJoin(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
 	fmt.Printf("Prepare to download %s to %s\n", uc.VMImage.FileURL, vmFile)
 
 	origMd5 := getOrigMd5(uc.VMImage)
@@ -147,6 +155,8 @@ func vmFilePath(hypervisor string, collectedPaths []string) string {
 		search = ".ova"
 	} else if hypervisor == "VMware" {
 		search = ".ovf"
+	} else if hypervisor == "HyperV" {
+		search = ".xml"
 	} else {
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 		return ""
@@ -162,14 +172,14 @@ func vmFilePath(hypervisor string, collectedPaths []string) string {
 
 // UnzipVM function unpack downloaded VM archive.
 func UnzipVM(uc UserChoice) string {
-	vmPath := path.Join(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
+	vmPath := pathJoin(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
 	zipReader, err := zip.OpenReader(vmPath)
 	if err != nil {
 		panic(err)
 	}
 	defer zipReader.Close()
 
-	unzipFolder := path.Join(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
+	unzipFolder := pathJoin(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
 	unzipFolderParts := strings.Split(unzipFolder, ".")
 	unzipFolder = strings.Join(unzipFolderParts[:len(unzipFolderParts)-1], ".")
 	if _, err := os.Stat(unzipFolder); os.IsNotExist(err) {
@@ -182,10 +192,10 @@ func UnzipVM(uc UserChoice) string {
 	var collectedPaths []string
 	for _, file := range zipReader.File {
 		fmt.Printf("Unpacking '%s'\n", file.Name)
-		filePath := path.Join(unzipFolder, file.Name)
+		filePath := pathJoin(unzipFolder, file.Name)
 		if _, err := os.Stat(filePath); err == nil {
 			collectedPaths = append(collectedPaths, filePath)
-			fmt.Printf("File '%s' already exist, skip\n", filePath)
+			fmt.Printf("File '%s' already exist, skip.\n", filePath)
 			continue
 		}
 		if file.FileInfo().IsDir() {
@@ -245,6 +255,7 @@ func virtualboxImportVM(vmPath string) error {
 }
 
 func vmwareCheck() error {
+	// TODO: improve VMware installation checks for Windows platforms.
 	// NOTE: VMware requires two command line tools to works with VMs.
 	fmt.Println("Checking VMware installation..")
 	cmdName := "ovftool"
@@ -258,9 +269,11 @@ func vmwareCheck() error {
 
 	// NOTE: vmrun doesn't have --help or --version or similar options.
 	// Without any parameters it exits with status code 255 and help text.
+	// NOTE: Under Windows vmrun has exist status 4294967295.
 	cmdName = "vmrun"
 	result, err = exec.Command(cmdName).CombinedOutput()
-	if fmt.Sprintf("%s", err) != "exit status 255" {
+	// TODO: improve this check
+	if !strings.Contains(fmt.Sprintf("%s", err), "exit status") {
 		fmt.Println(string(result), err)
 		return err
 	}
@@ -317,13 +330,47 @@ func vmwareImportVM(vmxPath string) error {
 	return nil
 }
 
+func checkHyperv() error {
+	// Powershell is required for Hyper-V.
+	cmdName := "powershell"
+	cmdArgs1 := []string{"-Command", "Get-Host"}
+	if result, err := exec.Command(cmdName, cmdArgs1...).CombinedOutput(); err != nil {
+		fmt.Println(string(result))
+		return err
+	}
+	fmt.Println("Powershell is present.")
+
+	// Check if Hyper-V cmdlets are available.
+	cmdArgs2 := []string{"-Command", "Get-Command", "-Module", "Hyper-V"}
+	if result, err := exec.Command(cmdName, cmdArgs2...).CombinedOutput(); err != nil {
+		fmt.Println(string(result))
+		return err
+	}
+	fmt.Println("Hyper-V Cmdlets are present.")
+	return nil
+}
+
+func hypervImportVM(vmPath string) error {
+	fmt.Printf("Import '%s'. Please wait.\n", vmPath)
+	cmdName := "powershell"
+	cmdArgs1 := []string{"-Command", "Import-VM", "-Path", fmt.Sprintf("'%s'", vmPath)}
+	if result, err := exec.Command(cmdName, cmdArgs1...).CombinedOutput(); err != nil {
+		fmt.Println(string(result))
+		return err
+	}
+	// TODO: check if it is possible to fix network for HyperV.
+	fmt.Println("WARNING: Please check Network adapter settings. By default it isn't connected.")
+	return nil
+}
+
 // InstallVM function installs unpacked VM into a selected hypervisor.
 func InstallVM(hypervisor string, vmPath string) {
-	if hypervisor == "VirtualBox" {
+	switch hypervisor{
+	case "VirtualBox":
 		if err := virtualboxCheck(); err == nil {
 			virtualboxImportVM(vmPath)
 		}
-	} else if hypervisor == "VMware" {
+	case "VMware":
 		if err := vmwareCheck(); err != nil {
 			os.Exit(1)
 		}
@@ -333,7 +380,11 @@ func InstallVM(hypervisor string, vmPath string) {
 		}
 		vmwareFixNetwork(vmxPath)
 		vmwareImportVM(vmxPath)
-	} else {
+	case "HyperV":
+		if err := checkHyperv(); err == nil {
+			hypervImportVM(vmPath)
+		}
+	default:
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 	}
 }
