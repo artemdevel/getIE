@@ -1,21 +1,22 @@
-// Data related functions
+// Package utils contains various supplementary functions and data structures.
+// This file data.go contains functions related to data processing and defines all data structures.
 package utils
 
 import (
-	"fmt"
-	"net/http"
-	"io/ioutil"
-	"regexp"
 	"encoding/json"
-	"strings"
-	"runtime"
-	"path"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"path"
+	"regexp"
+	"runtime"
+	"strings"
 )
 
-// JsonData represents data obtained by DownloadJson function
-// some fields, like _ts, _etag, __colId etc are omitted
-type JsonData struct {
+// JSONData represents data obtained by DownloadJson function.
+// Some fields, like _ts, _etag, __colId etc are omitted.
+type JSONData struct {
 	Active       bool   `json:"active"`
 	ID           string `json:"id"`
 	ReleaseNotes string `json:"releaseNotes"`
@@ -37,50 +38,49 @@ type JsonData struct {
 	Version string `json:"version"`
 }
 
-// Available choices
+// Choice type represents list of available choices.
 type Choice []string
 
-// Choices grouped by other choices
+// ChoiceGroups type represents list of choices grouped by some string key (other choices).
 type ChoiceGroups map[string]Choice
 
-// Spec defines possible configuration
+// Spec type defines possible configuration available for a user to choose from.
 type Spec struct {
 	Platform   string
 	Hypervisor string
-	// IE version and Windows version available as a single option
-	BrowserOs  string
+	// IE version and Windows version available as a single option.
+	BrowserOs string
 }
 
-// VmImage defines from where download virtual machine image and its md5 sum
-type VmImage struct {
+// VMImage type defines VM archive file metadata.
+type VMImage struct {
 	FileURL string
-	// instead of actual md5 sum value an URL to a file which contains md5 value is provided
-	Md5URL     string
+	// Instead of actual md5 sum value Microsoft provides an URL to a file which contains md5 value.
+	Md5URL string
 }
 
-// Available VMs for given Specs
-type AvailableVms map[Spec]VmImage
+// AvailableVM type represents VMs available for a given Spec.
+type AvailableVM map[Spec]VMImage
 
-// Parameters selected by a user
+// UserChoice type defines options selected by a user.
 type UserChoice struct {
 	Spec
-	VmImage
+	VMImage
 	DownloadPath string
 }
 
-// Default option selector function
+// DefaultChoice type defines a function type which is used to calculate default option index.
 type DefaultChoice func(choices Choice) int
 
-
-func (ch Choice) Len() int { return len(ch) }
+// Implement Sort interface to make list of choices sortable.
+func (ch Choice) Len() int           { return len(ch) }
 func (ch Choice) Less(i, j int) bool { return ch[i] < ch[j] }
-func (ch Choice) Swap(i, j int) { ch[i], ch[j] = ch[j], ch[i] }
+func (ch Choice) Swap(i, j int)      { ch[i], ch[j] = ch[j], ch[i] }
 
-func DownloadJson(page_url string) []byte {
-	// page_url contains JSON which is used to build IE version selection menus,
-	// so the whole page is downloaded and parsed by regexp to extract the actual JSON.
-	fmt.Printf("Download JSON data from %s\n\n", page_url)
-	resp, err := http.Get(page_url)
+// DownloadJSON function downloads given page and extract JSON structure from it.
+func DownloadJSON(pageURL string) []byte {
+	fmt.Printf("Download JSON data from %s\n\n", pageURL)
+	resp, err := http.Get(pageURL)
 	if err != nil {
 		panic(err)
 	}
@@ -95,19 +95,19 @@ func DownloadJson(page_url string) []byte {
 	return re.FindSubmatch(body)[1]
 }
 
-// Parse extracted JSON into more convenient data structures
-func ParseJson(raw_data *[]byte) (
-	platforms, hypervisors, browsers ChoiceGroups, available_vms AvailableVms) {
-	var data JsonData
-	if err := json.Unmarshal(*raw_data, &data); err != nil {
+// ParseJSON function parses extracted JSON into more convenient data structures.
+func ParseJSON(rawData *[]byte) (
+	platforms, hypervisors, browsers ChoiceGroups, availableVms AvailableVM) {
+	var data JSONData
+	if err := json.Unmarshal(*rawData, &data); err != nil {
 		panic(err)
 	}
 
-	seen_platforms := make(map[string]bool)
+	seenPlatforms := make(map[string]bool)
 	platforms = make(ChoiceGroups)
 	hypervisors = make(ChoiceGroups)
 	browsers = make(ChoiceGroups)
-	available_vms = make(AvailableVms)
+	availableVms = make(AvailableVM)
 
 	for _, software := range data.SoftwareList {
 		hypervisor := software.SoftwareName
@@ -117,33 +117,33 @@ func ParseJson(raw_data *[]byte) (
 		}
 
 		for _, platform := range software.OsList {
-			if !seen_platforms[platform] {
-				seen_platforms[platform] = true
+			if !seenPlatforms[platform] {
+				seenPlatforms[platform] = true
 				platforms["All"] = append(platforms["All"], platform)
 			}
 			hypervisors[platform] = append(hypervisors[platform], hypervisor)
 		}
 
 		for _, browser := range software.Vms {
-			browser_os := strings.Join([]string{browser.BrowserName, browser.OsVersion}, " ")
-			browsers[hypervisor] = append(browsers[hypervisor], browser_os)
+			browserOs := strings.Join([]string{browser.BrowserName, browser.OsVersion}, " ")
+			browsers[hypervisor] = append(browsers[hypervisor], browserOs)
 			for _, file := range browser.Files {
 				if file.Md5 != "" {
-					vm := VmImage{FileURL: file.URL, Md5URL: file.Md5}
+					vm := VMImage{FileURL: file.URL, Md5URL: file.Md5}
 					for _, p := range software.OsList {
-						spec := Spec{Platform: p, Hypervisor: hypervisor, BrowserOs: browser_os}
-						available_vms[spec] = vm
+						spec := Spec{Platform: p, Hypervisor: hypervisor, BrowserOs: browserOs}
+						availableVms[spec] = vm
 					}
 				}
 			}
 		}
 	}
 
-	return platforms, hypervisors, browsers, available_vms
+	return platforms, hypervisors, browsers, availableVms
 }
 
-// Get default download path based on OS
-func get_download_path() string {
+// getDownloadPath function constructs default download path based on OS.
+func getDownloadPath() string {
 	switch runtime.GOOS {
 	case "linux":
 		return path.Join(os.Getenv("HOME"), "Downloads")
@@ -156,25 +156,28 @@ func get_download_path() string {
 	}
 }
 
-func get_working_path() string {
-	working_path, err := os.Getwd()
+// getWorkingPath function returns current working path.
+func getWorkingPath() string {
+	workingPath, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
-	return working_path
+	return workingPath
 }
 
-
+// GetDownloadPaths function builds a list of choices for available download paths.
 func GetDownloadPaths() ChoiceGroups {
 	choices := make(ChoiceGroups)
-	for _, download_path := range []string{get_working_path(), get_download_path()} {
-		if download_path != "" {
-			choices["All"] = append(choices["All"], download_path)
+	for _, downloadPath := range []string{getWorkingPath(), getDownloadPath()} {
+		if downloadPath != "" {
+			choices["All"] = append(choices["All"], downloadPath)
 		}
 	}
 	return choices
 }
 
+// GetDefaultPlatform function return an index for current platform from the platforms choices list.
+// If no platform detected the first choice is returned (choice indexes are zero-based).
 func GetDefaultPlatform(choices Choice) int {
 	for idx, platform := range choices {
 		switch {
@@ -186,9 +189,11 @@ func GetDefaultPlatform(choices Choice) int {
 			return idx
 		}
 	}
-	return 1
+	return 0
 }
 
+// GetDefaultHypervisor function returns an index for default hypervisor from the hypervisors choices list.
+// VirtualBox is now default selection for all platforms but it could be platform specific in the future.
 func GetDefaultHypervisor(choices Choice) int {
 	for idx, hypervisor := range choices {
 		if hypervisor == "VirtualBox" {
@@ -198,14 +203,17 @@ func GetDefaultHypervisor(choices Choice) int {
 	return 1
 }
 
+// GetDefaultBrowser function returns an index for default browser.
+// The latest browser from the list is considered default for now.
 func GetDefaultBrowser(choices Choice) int {
-	// Consider the latest browser is the newest
 	return len(choices) - 1
 }
 
+// GetDefaultDownloadPath function returns an index for default download folder.
+// User's specific download folder is considered default for now.
 func GetDefaultDownloadPath(choices Choice) int {
-	for idx, download_path := range choices {
-		if strings.Contains(download_path, "Downloads") {
+	for idx, downloadPath := range choices {
+		if strings.Contains(downloadPath, "Downloads") {
 			return idx
 		}
 	}

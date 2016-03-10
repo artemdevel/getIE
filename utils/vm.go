@@ -1,21 +1,22 @@
-// Hypervisors and VMs related functions
+// Package utils contains various supplementary functions and data structures.
+// This file vm.go contains functions related to hypervisors and VMs management functions.
 package utils
 
 import (
-	"io"
-	"hash"
-	"fmt"
-	"net/http"
-	"io/ioutil"
-	"os"
-	"path"
-	"crypto/md5"
 	"archive/zip"
+	"crypto/md5"
+	"fmt"
+	"hash"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"os"
 	"os/exec"
+	"path"
 	"strings"
 )
 
-// Wrapper to track download progress
+// ProgressWrapper type is used to track download progress.
 type ProgressWrapper struct {
 	io.Reader
 	total    int64
@@ -24,7 +25,7 @@ type ProgressWrapper struct {
 	step     float64
 }
 
-// Wrapper to calculate md5 sum of the downloaded
+// Md5Wrapper type is used to calculate file's md5 sum during download.
 type Md5Wrapper struct {
 	io.Writer
 	md5sum hash.Hash
@@ -52,22 +53,22 @@ func (mw *Md5Wrapper) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// Get MD5 provided by Microsoft for each VM archive
-func get_orig_md5(vm VmImage) string {
+// getOrigMd5 function gets MD5 provided by Microsoft for each VM archive.
+func getOrigMd5(vm VMImage) string {
 	resp, err := http.Get(vm.Md5URL)
 	if err != nil {
 		panic(err)
 	}
 	defer resp.Body.Close()
 
-	orig_md5, err := ioutil.ReadAll(resp.Body)
+	origMd5, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
-	return string(orig_md5)
+	return string(origMd5)
 }
 
-func compare_md5(md5str1, md5str2 string) {
+func compareMd5(md5str1, md5str2 string) {
 	if md5str1 != md5str2 {
 		fmt.Println("MD5 sum doesn't match. Aborting.")
 		os.Exit(1)
@@ -76,69 +77,71 @@ func compare_md5(md5str1, md5str2 string) {
 	}
 }
 
-// Download VM archive and return path where it was stored
-func DownloadVm(uc UserChoice) string {
+// DownloadVM function downloads VM archive defined by a user and returns the path where it was stored.
+func DownloadVM(uc UserChoice) string {
 	// TODO: during download add .part extension to the downloaded file
 	// TODO: add check for .part file for resumable downloads
 	// TODO: return error instead of panic()
-	vm_file := path.Join(uc.DownloadPath, path.Base(uc.VmImage.FileURL))
-	fmt.Printf("Prepare to download %s to %s\n", uc.VmImage.FileURL, vm_file)
+	vmFile := path.Join(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
+	fmt.Printf("Prepare to download %s to %s\n", uc.VMImage.FileURL, vmFile)
 
-	orig_md5 := get_orig_md5(uc.VmImage)
-	fmt.Printf("Expected MD5 sum %s\n", orig_md5)
+	origMd5 := getOrigMd5(uc.VMImage)
+	fmt.Printf("Expected MD5 sum %s\n", origMd5)
 
-	if _, err := os.Stat(vm_file); err == nil {
-		fmt.Printf("File %s already exists.\nChecking MD5 sum\n", vm_file)
-		old_file, err := os.Open(vm_file)
+	if _, err := os.Stat(vmFile); err == nil {
+		fmt.Printf("File %s already exists.\nChecking MD5 sum\n", vmFile)
+		oldFile, err := os.Open(vmFile)
 		if err != nil {
 			panic(err)
 		}
-		defer old_file.Close()
+		defer oldFile.Close()
 
-		old_md5 := md5.New()
-		if _, err := io.Copy(old_md5, old_file); err != nil {
+		oldMd5 := md5.New()
+		if _, err := io.Copy(oldMd5, oldFile); err != nil {
 			panic(err)
 		}
 
-		vm_md5 := fmt.Sprintf("%X", old_md5.Sum([]byte{}))
-		fmt.Printf("Local file MD5 sum %s\n", vm_md5)
-		compare_md5(orig_md5, vm_md5)
+		vmMd5 := fmt.Sprintf("%X", oldMd5.Sum([]byte{}))
+		fmt.Printf("Local file MD5 sum %s\n", vmMd5)
+		compareMd5(origMd5, vmMd5)
 	} else {
 		fmt.Println("Start downloading.")
 
-		new_file, err := os.Create(vm_file)
+		newFile, err := os.Create(vmFile)
 		if err != nil {
 			panic(err)
 		}
-		defer new_file.Close()
-		new_file_md5 := &Md5Wrapper{Writer: new_file, md5sum: md5.New()}
+		defer newFile.Close()
+		newFileMd5 := &Md5Wrapper{Writer: newFile, md5sum: md5.New()}
 
-		vm_resp, err := http.Get(uc.VmImage.FileURL)
+		resp, err := http.Get(uc.VMImage.FileURL)
 		if err != nil {
 			panic(err)
 		}
-		defer vm_resp.Body.Close()
-		fmt.Printf("File size %d bytes\n", vm_resp.ContentLength)
-		vm_src := &ProgressWrapper{
-			Reader: vm_resp.Body,
-			size: vm_resp.ContentLength,
+		defer resp.Body.Close()
+		fmt.Printf("File size %d bytes\n", resp.ContentLength)
+		vmSrc := &ProgressWrapper{
+			Reader: resp.Body,
+			size:   resp.ContentLength,
 			// progress download step for 1Mb chunks
-			step: float64(1024 * 1024) / float64(vm_resp.ContentLength) * float64(100),
+			step: float64(1024*1024) / float64(resp.ContentLength) * float64(100),
 		}
 
-		if _, err := io.Copy(new_file_md5, vm_src); err != nil {
+		if _, err := io.Copy(newFileMd5, vmSrc); err != nil {
 			panic(err)
 		}
 
-		vm_md5 := fmt.Sprintf("%X", new_file_md5.md5sum.Sum([]byte{}))
-		fmt.Printf("Downloaded file MD5 sum %s\n", vm_md5)
-		compare_md5(orig_md5, vm_md5)
+		vmMd5 := fmt.Sprintf("%X", newFileMd5.md5sum.Sum([]byte{}))
+		fmt.Printf("Downloaded file MD5 sum %s\n", vmMd5)
+		compareMd5(origMd5, vmMd5)
 	}
-	return vm_file
+	return vmFile
 }
 
-// Get exact file path depending on a hypervisor
-func vm_file_path(hypervisor string, collected_paths []string) string {
+// vmFilePath function finds a specific file path depending on a hypervisor.
+// Different hypervisors have different file names for VMs. For example, VirtualBox has .ova extension but VMware needs
+// .ovf file etc.
+func vmFilePath(hypervisor string, collectedPaths []string) string {
 	search := ""
 	if hypervisor == "VirtualBox" {
 		search = ".ova"
@@ -148,188 +151,188 @@ func vm_file_path(hypervisor string, collected_paths []string) string {
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 		return ""
 	}
-	for _, vm_path := range collected_paths {
-		if strings.HasSuffix(vm_path, search) {
-			return vm_path
+	for _, vmPath := range collectedPaths {
+		if strings.HasSuffix(vmPath, search) {
+			return vmPath
 		}
 	}
 	// TODO: return error if found nothing
 	return ""
 }
 
-// Unzip downloaded VM
-func UnzipVm(uc UserChoice) string {
-	vm_path := path.Join(uc.DownloadPath, path.Base(uc.VmImage.FileURL))
-	zip_reader, err := zip.OpenReader(vm_path)
+// UnzipVM function unpack downloaded VM archive.
+func UnzipVM(uc UserChoice) string {
+	vmPath := path.Join(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
+	zipReader, err := zip.OpenReader(vmPath)
 	if err != nil {
 		panic(err)
 	}
-	defer zip_reader.Close()
+	defer zipReader.Close()
 
-	unzip_folder := path.Join(uc.DownloadPath, path.Base(uc.VmImage.FileURL))
-	unzip_folder_parts := strings.Split(unzip_folder, ".")
-	unzip_folder = strings.Join(unzip_folder_parts[:len(unzip_folder_parts)-1], ".")
-	if _, err := os.Stat(unzip_folder); os.IsNotExist(err) {
-		if err := os.Mkdir(unzip_folder, 0755); err != nil {
+	unzipFolder := path.Join(uc.DownloadPath, path.Base(uc.VMImage.FileURL))
+	unzipFolderParts := strings.Split(unzipFolder, ".")
+	unzipFolder = strings.Join(unzipFolderParts[:len(unzipFolderParts)-1], ".")
+	if _, err := os.Stat(unzipFolder); os.IsNotExist(err) {
+		if err := os.Mkdir(unzipFolder, 0755); err != nil {
 			panic(err)
 		}
 	}
-	fmt.Printf("Unpack data into %s\n", unzip_folder)
+	fmt.Printf("Unpack data into '%s'\n", unzipFolder)
 
-	var collected_paths []string
-	for _, file := range zip_reader.File {
+	var collectedPaths []string
+	for _, file := range zipReader.File {
 		fmt.Printf("Unpacking '%s'\n", file.Name)
-		file_path := path.Join(unzip_folder, file.Name)
-		if _, err := os.Stat(file_path); err == nil {
-			collected_paths = append(collected_paths, file_path)
-			fmt.Printf("File '%s' already exist, skip\n", file_path)
+		filePath := path.Join(unzipFolder, file.Name)
+		if _, err := os.Stat(filePath); err == nil {
+			collectedPaths = append(collectedPaths, filePath)
+			fmt.Printf("File '%s' already exist, skip\n", filePath)
 			continue
 		}
 		if file.FileInfo().IsDir() {
-			os.MkdirAll(file_path, file.Mode())
+			os.MkdirAll(filePath, file.Mode())
 			continue
 		}
 
 		// Collected paths are required because each hypervisor has its own entry point file.
-		// For example, VirtualBox needs .ova file, VMware needs .vmdk file and Hyper-V needs .xml file etc
-		collected_paths = append(collected_paths, file_path)
+		// For example, VirtualBox needs .ova file, VMware needs .ovf file and Hyper-V needs .xml file etc.
+		collectedPaths = append(collectedPaths, filePath)
 
-		file_reader, err := file.Open()
+		fileReader, err := file.Open()
 		if err != nil {
 			panic(err)
 		}
-		defer file_reader.Close()
+		defer fileReader.Close()
 
-		target_file, err := os.OpenFile(file_path, os.O_WRONLY|os.O_CREATE|os.O_CREATE, file.Mode())
+		targetFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_CREATE, file.Mode())
 		if err != nil {
 			panic(err)
 		}
-		defer target_file.Close()
+		defer targetFile.Close()
 
-
-		if _, err := io.Copy(target_file, file_reader); err != nil {
+		if _, err := io.Copy(targetFile, fileReader); err != nil {
 			panic(err)
 		}
 	}
-	return vm_file_path(uc.Hypervisor, collected_paths)
+	return vmFilePath(uc.Hypervisor, collectedPaths)
 }
 
-func virtualbox_check() error {
+func virtualboxCheck() error {
+	// TODO: improve VirtualBox installation checks for Windows platforms.
 	fmt.Println("Checking VirtualBox installation..")
-	cmd_name := "vboxmanage"
-	cmd_args := []string{"--version"}
-	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+	cmdName := "vboxmanage"
+	cmdArgs := []string{"--version"}
+	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
+	if err != nil {
 		fmt.Println(string(result), err)
 		return err
-	} else {
-		fmt.Println("Detected vboxmanage version", string(result))
 	}
+	fmt.Println("Detected vboxmanage version", string(result))
 	return nil
 }
 
-func virtualbox_import_vm(vm_path string) error {
+func virtualboxImportVM(vmPath string) error {
 	// NOTE: vboxmanage can import the same VM many times
 	fmt.Println("Import VM into VirtualBox. Please wait.")
-	cmd_name := "vboxmanage"
-	cmd_args := []string{"import", vm_path}
-
-	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+	cmdName := "vboxmanage"
+	cmdArgs := []string{"import", vmPath}
+	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
+	if err != nil {
 		fmt.Println(string(result), err)
 		return err
-	} else {
-		fmt.Println(string(result))
 	}
+	fmt.Println(string(result))
 	return nil
 }
 
-func vmware_check() error {
+func vmwareCheck() error {
+	// NOTE: VMware requires two command line tools to works with VMs.
 	fmt.Println("Checking VMware installation..")
-	cmd_name := "ovftool"
-	cmd_args := []string{"--version"}
-	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+	cmdName := "ovftool"
+	cmdArgs := []string{"--version"}
+	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
+	if err != nil {
 		fmt.Println(string(result), err)
 		return err
-	} else {
-		fmt.Println("Detected", string(result))
 	}
+	fmt.Println("Detected", string(result))
 
 	// NOTE: vmrun doesn't have --help or --version or similar options.
-	// Without any parameters it exits with status code 255 and help text
-	cmd_name = "vmrun"
-	if result, err := exec.Command(cmd_name).CombinedOutput(); fmt.Sprintf("%s", err) != "exit status 255" {
+	// Without any parameters it exits with status code 255 and help text.
+	cmdName = "vmrun"
+	result, err = exec.Command(cmdName).CombinedOutput()
+	if fmt.Sprintf("%s", err) != "exit status 255" {
 		fmt.Println(string(result), err)
 		return err
-	} else {
-		fmt.Println("Detected", strings.Split(string(result), "\n")[1])
 	}
+	fmt.Println("Detected", strings.Split(string(result), "\n")[1])
 	return nil
 }
 
-// VMware require .vmx file to run a VM but only .ovf is provided
-func vmware_convert_ovf(ovf_path string) (string, error) {
+// vmwareConvert functions converts provided .ovf file into .vmx file.
+func vmwareConvert(ovfPath string) (string, error) {
 	// NOTE: ovftool fails if .vmx file exists
-	vmx_path := strings.Replace(ovf_path, ".ovf", ".vmx", 1)
-	fmt.Printf("Convert %s to %s. Please wait.\n", ovf_path, vmx_path)
+	vmxPath := strings.Replace(ovfPath, ".ovf", ".vmx", 1)
+	fmt.Printf("Convert %s to %s. Please wait.\n", ovfPath, vmxPath)
 
-	cmd_name := "ovftool"
-	cmd_args := []string{ovf_path, vmx_path}
-	if result, err := exec.Command(cmd_name, cmd_args...).CombinedOutput(); err != nil {
+	cmdName := "ovftool"
+	cmdArgs := []string{ovfPath, vmxPath}
+	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
+	if err != nil {
 		fmt.Println(string(result), err)
 		return "", err
-	} else {
-		fmt.Println(string(result))
 	}
-	return vmx_path, nil
+	fmt.Println(string(result))
+	return vmxPath, nil
 }
 
-// Provided VMware VM doesn't have network adapter
-func vmware_fix_vmx(vmx_path string) {
-	if vmx_file, err := os.Stat(vmx_path); err == nil {
-		if vmx_file, err := os.OpenFile(vmx_path, os.O_APPEND|os.O_WRONLY, vmx_file.Mode()); err == nil {
-			vmx_file.WriteString("ethernet0.present = \"TRUE\"\n")
-			vmx_file.WriteString("ethernet0.connectionType = \"nat\"\n")
-			vmx_file.WriteString("ethernet0.wakeOnPcktRcv = \"FALSE\"\n")
-			vmx_file.WriteString("ethernet0.addressType = \"generated\"\n")
-			vmx_file.Close()
+// vmwareFixNetwork functions add missed network configuration into .vmx file.
+func vmwareFixNetwork(vmxPath string) {
+	if vmxFile, err := os.Stat(vmxPath); err == nil {
+		if vmxFile, err := os.OpenFile(vmxPath, os.O_APPEND|os.O_WRONLY, vmxFile.Mode()); err == nil {
+			vmxFile.WriteString("ethernet0.present = \"TRUE\"\n")
+			vmxFile.WriteString("ethernet0.connectionType = \"nat\"\n")
+			vmxFile.WriteString("ethernet0.wakeOnPcktRcv = \"FALSE\"\n")
+			vmxFile.WriteString("ethernet0.addressType = \"generated\"\n")
+			vmxFile.Close()
 		}
 	}
 }
 
-// Looks like VMware runvm command doesn't have anything like import, so I start and stop a VM.
-// Also, if runvm starts a VM with nogui option such VM isn't added to the list for some reason.
-func vmware_import_vm(vmx_path string) error {
-	fmt.Printf("Starting %s VM\n", vmx_path)
-	cmd_name1 := "vmrun"
-	cmd_args1 := []string{"start", vmx_path}
-	if _, err := exec.Command(cmd_name1, cmd_args1...).Output(); err != nil {
+func vmwareImportVM(vmxPath string) error {
+	// NOTE: VMware runvm command doesn't have anything like import, so start and stop sub-commands
+	// are used to add a VM into the library.
+	fmt.Printf("Starting %s VM\n", vmxPath)
+
+	cmdName := "vmrun"
+	cmdArgs := []string{"start", vmxPath}
+	if _, err := exec.Command(cmdName, cmdArgs...).Output(); err != nil {
 		return err
 	}
 
-	fmt.Printf("Stopping %s VM\n", vmx_path)
-	cmd_name2 := "vmrun"
-	cmd_args2 := []string{"stop", vmx_path}
-	if _, err := exec.Command(cmd_name2, cmd_args2...).Output(); err != nil {
+	fmt.Printf("Stopping %s VM\n", vmxPath)
+	cmdArgs[0] = "stop"
+	if _, err := exec.Command(cmdName, cmdArgs...).Output(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Install unpacked VM into selected hypervisor
-func InstallVm(hypervisor string, vm_path string) {
+// InstallVM function installs unpacked VM into a selected hypervisor.
+func InstallVM(hypervisor string, vmPath string) {
 	if hypervisor == "VirtualBox" {
-		if err := virtualbox_check(); err == nil {
-			virtualbox_import_vm(vm_path)
+		if err := virtualboxCheck(); err == nil {
+			virtualboxImportVM(vmPath)
 		}
 	} else if hypervisor == "VMware" {
-		if err := vmware_check(); err != nil {
+		if err := vmwareCheck(); err != nil {
 			os.Exit(1)
 		}
-		vmx_path, err := vmware_convert_ovf(vm_path)
+		vmxPath, err := vmwareConvert(vmPath)
 		if err != nil {
 			os.Exit(1)
 		}
-		vmware_fix_vmx(vmx_path)
-		vmware_import_vm(vmx_path)
+		vmwareFixNetwork(vmxPath)
+		vmwareImportVM(vmxPath)
 	} else {
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
 	}

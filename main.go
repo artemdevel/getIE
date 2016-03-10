@@ -5,36 +5,37 @@ import (
 	"os"
 )
 
+// BuildRev var is set from the command line and used in ShowBanner function.
 var BuildRev string
 
-const VMS_URL = "https://dev.windows.com/en-us/microsoft-edge/tools/vms/windows/"
+const vmsURL = "https://dev.windows.com/en-us/microsoft-edge/tools/vms/windows/"
 
 func main() {
 	utils.ShowBanner(BuildRev)
 	args := os.Args[1:]
 	if len(args) == 0 {
-		raw_data := utils.DownloadJson(VMS_URL)
-		platforms, hypervisors, browsers, available_vms := utils.ParseJson(&raw_data)
+		rawData := utils.DownloadJSON(vmsURL)
+		platforms, hypervisors, browsers, availableVms := utils.ParseJSON(&rawData)
 
-		user_choice := utils.UserChoice{}
-		user_choice.Platform = utils.SelectOption(
+		userChoice := utils.UserChoice{}
+		userChoice.Platform = utils.SelectOption(
 			platforms, "Select platform", "All", utils.GetDefaultPlatform)
-		user_choice.Hypervisor = utils.SelectOption(
-			hypervisors, "Select hypervisor", user_choice.Platform, utils.GetDefaultHypervisor)
-		user_choice.BrowserOs = utils.SelectOption(
-			browsers, "Select browser and OS", user_choice.Hypervisor, utils.GetDefaultBrowser)
-		user_choice.VmImage = available_vms[user_choice.Spec]
-		user_choice.DownloadPath = utils.SelectOption(
+		userChoice.Hypervisor = utils.SelectOption(
+			hypervisors, "Select hypervisor", userChoice.Platform, utils.GetDefaultHypervisor)
+		userChoice.BrowserOs = utils.SelectOption(
+			browsers, "Select browser and OS", userChoice.Hypervisor, utils.GetDefaultBrowser)
+		userChoice.VMImage = availableVms[userChoice.Spec]
+		userChoice.DownloadPath = utils.SelectOption(
 			utils.GetDownloadPaths(), "Select download path", "All", utils.GetDefaultDownloadPath)
-		utils.ConfirmUsersChoice(user_choice)
+		utils.ConfirmUsersChoice(userChoice)
 
-		utils.DownloadVm(user_choice)
+		utils.DownloadVM(userChoice)
 		utils.EnterToContinue("Download finished")
 
-		vm_path := utils.UnzipVm(user_choice)
+		vmPath := utils.UnzipVM(userChoice)
 		utils.EnterToContinue("Unzip finished")
 
-		utils.InstallVm(user_choice.Hypervisor, vm_path)
+		utils.InstallVM(userChoice.Hypervisor, vmPath)
 	} else {
 		// TODO: process command-line args
 	}

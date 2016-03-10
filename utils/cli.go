@@ -1,22 +1,23 @@
-// Very simple console interface
+// Package utils contains various supplementary functions and data structures.
+// This file cli.go contains functions for very simple console interface.
 package utils
 
 import (
+	"bufio"
 	"fmt"
 	"os"
-	"bufio"
-	"strings"
 	"runtime"
-	"strconv"
 	"sort"
+	"strconv"
+	"strings"
 )
 
-// Show application's greeting banner
+// ShowBanner function shows application's greeting banner.
 func ShowBanner(rev string) {
 	fmt.Printf("Get IE tool. Build rev %s.\n", rev)
 }
 
-// Yes/No choice
+// YesNoConfirmation function shows Yes/No choice. N is default choice for now.
 func YesNoConfirmation(msg string) {
 	reader := bufio.NewReader(os.Stdin)
 	defer fmt.Println()
@@ -31,7 +32,7 @@ func YesNoConfirmation(msg string) {
 	}
 }
 
-// Press ENTER to continue
+// EnterToContinue function shows press ENTER confirmation for a give message.
 func EnterToContinue(msg string) {
 	reader := bufio.NewReader(os.Stdin)
 	if runtime.GOOS == "darwin" {
@@ -42,38 +43,39 @@ func EnterToContinue(msg string) {
 	reader.ReadString('\n')
 }
 
-// Select an option from 'menu'
-func SelectOption(choices ChoiceGroups, group_msg, group_name string, default_choice_func DefaultChoice) string {
+// SelectOption function shows simple selection 'menu'.
+func SelectOption(choices ChoiceGroups, groupMsg, groupName string, defaultChoiceFunc DefaultChoice) string {
 	reader := bufio.NewReader(os.Stdin)
 	defer fmt.Println()
 
-	sorted_choices := choices[group_name]
-	sort.Sort(sorted_choices)
-	default_choice := default_choice_func(sorted_choices)
-	for choice, option := range sorted_choices {
+	sortedChoices := choices[groupName]
+	sort.Sort(sortedChoices)
+	defaultChoice := defaultChoiceFunc(sortedChoices)
+	for choice, option := range sortedChoices {
 		fmt.Println(choice, option)
 	}
 	for {
-		fmt.Printf("%s [%d]: ", group_msg, default_choice)
+		fmt.Printf("%s [%d]: ", groupMsg, defaultChoice)
 		text, _ := reader.ReadString('\n')
 		if text == "\n" {
-			return sorted_choices[default_choice]
+			return sortedChoices[defaultChoice]
 		}
 		selected, err := strconv.Atoi(strings.TrimSpace(text))
 		if err != nil {
 			continue
 		}
-		if selected < 0 || selected > len(sorted_choices) {
+		if selected < 0 || selected > len(sortedChoices) {
 			continue
 		}
-		return sorted_choices[selected]
+		return sortedChoices[selected]
 	}
 }
 
-func ConfirmUsersChoice(user_choice UserChoice) {
-	fmt.Println("Platform:", user_choice.Spec.Platform)
-	fmt.Println("Hypervisor:", user_choice.Spec.Hypervisor)
-	fmt.Println("Browser and OS:", user_choice.Spec.BrowserOs)
-	fmt.Println("Download path:", user_choice.DownloadPath)
+// ConfirmUsersChoice shows options selected by a user.
+func ConfirmUsersChoice(userChoice UserChoice) {
+	fmt.Println("Platform:", userChoice.Spec.Platform)
+	fmt.Println("Hypervisor:", userChoice.Spec.Hypervisor)
+	fmt.Println("Browser and OS:", userChoice.Spec.BrowserOs)
+	fmt.Println("Download path:", userChoice.DownloadPath)
 	YesNoConfirmation("Confirm your selection")
 }
