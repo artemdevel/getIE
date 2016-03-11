@@ -36,9 +36,9 @@ func YesNoConfirmation(msg string) {
 func EnterToContinue(msg string) {
 	reader := bufio.NewReader(os.Stdin)
 	if runtime.GOOS == "darwin" {
-		fmt.Printf("%s. Press ENTER to continue CMD-C to abort.\n", msg)
+		fmt.Printf("%s\nPress ENTER to continue CMD-C to abort.\n", msg)
 	} else {
-		fmt.Printf("%s. Press ENTER to continue CTRL-C to abort.\n", msg)
+		fmt.Printf("%s\nPress ENTER to continue CTRL-C to abort.\n", msg)
 	}
 	reader.ReadString('\n')
 }
@@ -78,4 +78,24 @@ func ConfirmUsersChoice(userChoice UserChoice) {
 	fmt.Println("Browser and OS:", userChoice.Spec.BrowserOs)
 	fmt.Println("Download path:", userChoice.DownloadPath)
 	YesNoConfirmation("Confirm your selection")
+}
+
+// ShowHypervisorWarning function shows hypervisor specific warnings if any.
+func ShowHypervisorWarning(hypervisor string) {
+	switch hypervisor {
+	case "HyperV":
+		EnterToContinue("WARNING: For HyperV you must run this tool as Administrator.")
+	case "VMware":
+		if runtime.GOOS == "darwin" {
+			EnterToContinue("WARNING: At least VMware Fusion must be isntalled to run this tool correctly.")
+		} else {
+			EnterToContinue("WARNING: At least VMware Workstation must be isntalled to run this tool correctly.")
+		}
+	case "VirtualBox":
+		if runtime.GOOS == "windows" {
+			EnterToContinue("WARNING: VirtualBox could fail to run selected VM if Hyper-V is also installed.")
+		}
+	case "VPC":
+		EnterToContinue("WARNING: VPC (Virtual-PC) is obsolete.")
+	}
 }
