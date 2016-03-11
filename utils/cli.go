@@ -87,10 +87,13 @@ func ShowHypervisorWarning(hypervisor string) {
 		EnterToContinue("WARNING: For HyperV you must run this tool as Administrator.")
 	case "VMware":
 		if runtime.GOOS == "darwin" {
-			EnterToContinue("WARNING: At least VMware Fusion must be isntalled to run this tool correctly.")
+			EnterToContinue("WARNING: At least VMware Fusion must be installed to run this tool correctly.")
 		} else {
-			EnterToContinue("WARNING: At least VMware Workstation must be isntalled to run this tool correctly.")
+			EnterToContinue("WARNING: At least VMware Workstation must be installed to run this tool correctly.")
+			EnterToContinue("WARNING: VMware hypervisor isn't compatible with Hyper-V hypervisor.")
 		}
+	case "Parallels":
+			EnterToContinue("WARNING: Parallels Desktop for Mac Pro or Business Edition must be installed to run this tool correctly.")
 	case "VirtualBox":
 		if runtime.GOOS == "windows" {
 			EnterToContinue("WARNING: VirtualBox could fail to run selected VM if Hyper-V is also installed.")
