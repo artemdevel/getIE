@@ -155,6 +155,8 @@ func vmFilePath(hypervisor string, collectedPaths []string) (string, error) {
 		search = ".ovf"
 	case "HyperV":
 		search = ".xml"
+	case "Parallels":
+		search = ".pvs"
 	}
 	if search != "" {
 		for _, vmPath := range collectedPaths {
@@ -222,9 +224,9 @@ func UnzipVM(uc UserChoice) (string, error) {
 	return vmFilePath(uc.Hypervisor, collectedPaths)
 }
 
-func virtualboxCheck() error {
+func checkVirtualBox() error {
 	// TODO: improve VirtualBox installation checks for Windows platforms.
-	fmt.Println("Checking VirtualBox installation..")
+	fmt.Println("Checking VirtualBox installation.")
 	cmdName := "vboxmanage"
 	cmdArgs := []string{"--version"}
 	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
@@ -236,7 +238,7 @@ func virtualboxCheck() error {
 	return nil
 }
 
-func virtualboxImportVM(vmPath string) error {
+func importVirtualBoxVM(vmPath string) error {
 	// NOTE: vboxmanage can import the same VM many times
 	fmt.Println("Import VM into VirtualBox. Please wait.")
 	cmdName := "vboxmanage"
@@ -250,10 +252,10 @@ func virtualboxImportVM(vmPath string) error {
 	return nil
 }
 
-func vmwareCheck() error {
+func checkVmware() error {
 	// TODO: improve VMware installation checks for Windows platforms.
 	// NOTE: VMware requires two command line tools to works with VMs.
-	fmt.Println("Checking VMware installation..")
+	fmt.Println("Checking VMware installation.")
 	cmdName := "ovftool"
 	cmdArgs := []string{"--version"}
 	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
@@ -283,8 +285,8 @@ func vmwareCheck() error {
 	return nil
 }
 
-// vmwareConvert functions converts provided .ovf file into .vmx file.
-func vmwareConvert(ovfPath string) (string, error) {
+// convertVmware function converts provided .ovf file into .vmx file.
+func convertVmware(ovfPath string) (string, error) {
 	// NOTE: ovftool fails if .vmx file exists
 	vmxPath := strings.Replace(ovfPath, ".ovf", ".vmx", 1)
 	fmt.Printf("Convert %s to %s. Please wait.\n", ovfPath, vmxPath)
@@ -300,8 +302,8 @@ func vmwareConvert(ovfPath string) (string, error) {
 	return vmxPath, nil
 }
 
-// vmwareFixNetwork function adds missed network configuration into .vmx file.
-func vmwareFixNetwork(vmxPath string) {
+// fixVmwareNetwork function adds missed network configuration into .vmx file.
+func fixVmwareNetwork(vmxPath string) {
 	if vmxFile, err := os.Stat(vmxPath); err == nil {
 		if vmxFile, err := os.OpenFile(vmxPath, os.O_APPEND|os.O_WRONLY, vmxFile.Mode()); err == nil {
 			vmxFile.WriteString("ethernet0.present = \"TRUE\"\n")
@@ -313,7 +315,7 @@ func vmwareFixNetwork(vmxPath string) {
 	}
 }
 
-func vmwareImportVM(vmxPath string) error {
+func importVmwareVM(vmxPath string) error {
 	// NOTE: VMware runvm command doesn't have anything like import, so start and stop sub-commands
 	// are used to add a VM into the library.
 	fmt.Printf("Starting %s VM\n", vmxPath)
@@ -334,6 +336,7 @@ func vmwareImportVM(vmxPath string) error {
 
 func checkHyperv() error {
 	// Powershell is required for Hyper-V.
+	fmt.Println("Checking Hyper-V installation.")
 	cmdName := "powershell"
 	cmdArgs1 := []string{"-Command", "Get-Host"}
 	if result, err := exec.Command(cmdName, cmdArgs1...).CombinedOutput(); err != nil {
@@ -342,7 +345,7 @@ func checkHyperv() error {
 	}
 	fmt.Println("Powershell is present.")
 
-	// Check if Hyper-V cmdlets are available.
+	// Check if Hyper-V Cmdlets are available.
 	cmdArgs2 := []string{"-Command", "Get-Command", "-Module", "Hyper-V"}
 	if result, err := exec.Command(cmdName, cmdArgs2...).CombinedOutput(); err != nil {
 		fmt.Println(string(result))
@@ -352,7 +355,7 @@ func checkHyperv() error {
 	return nil
 }
 
-func hypervImportVM(vmPath string) error {
+func importHypervVM(vmPath string) error {
 	fmt.Printf("Import '%s'. Please wait.\n", vmPath)
 	cmdName := "powershell"
 	cmdArgs1 := []string{"-Command", "Import-VM", "-Path", fmt.Sprintf("'%s'", vmPath)}
@@ -361,9 +364,37 @@ func hypervImportVM(vmPath string) error {
 		return err
 	}
 	// NOTE: Hyper-V uses virtual network switches for VMs. After installation it doesn't have any network switches
-	// set. Also it could have several virtual network switches. So the imported VM is left as-is and a use should
+	// set. Also it could have several virtual network switches. So the imported VM is left as-is and a user should
 	// configure networking manually.
 	fmt.Println("WARNING: Please check Network adapter settings. By default it isn't connected.")
+	return nil
+}
+
+func checkParallels() error {
+	// NOTE: Parallels has two command line tools prlsrvctl and prlctl.
+	// Parallels version could be checked with prlsrvctl but VM management is done with prlctl.
+	fmt.Println("Checking Parallels installation.")
+	cmdName := "prlsrvctl"
+	cmdArgs := []string{"info"}
+	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
+	if err != nil {
+		fmt.Println(string(result), err)
+		return err
+	}
+	fmt.Println(string(result))
+	return nil
+}
+
+func importParallelsVM(vmPath string) error {
+	fmt.Println("Import VM into Parallels. Please wait.")
+	cmdName := "prlctl"
+	cmdArgs := []string{"register", vmPath}
+	result, err := exec.Command(cmdName, cmdArgs...).CombinedOutput()
+	if err != nil {
+		fmt.Println(string(result), err)
+		return err
+	}
+	fmt.Println(string(result))
 	return nil
 }
 
@@ -371,22 +402,24 @@ func hypervImportVM(vmPath string) error {
 func InstallVM(hypervisor string, vmPath string) {
 	switch hypervisor {
 	case "VirtualBox":
-		if err := virtualboxCheck(); err == nil {
-			virtualboxImportVM(vmPath)
+		if err := checkVirtualBox(); err == nil {
+			importVirtualBoxVM(vmPath)
 		}
 	case "VMware":
-		if err := vmwareCheck(); err != nil {
-			os.Exit(1)
+		if err := checkVmware(); err == nil {
+			if vmxPath, err := convertVmware(vmPath); err == nil {
+				fixVmwareNetwork(vmxPath)
+				importVmwareVM(vmxPath)
+			}
 		}
-		vmxPath, err := vmwareConvert(vmPath)
-		if err != nil {
-			os.Exit(1)
-		}
-		vmwareFixNetwork(vmxPath)
-		vmwareImportVM(vmxPath)
 	case "HyperV":
 		if err := checkHyperv(); err == nil {
-			hypervImportVM(vmPath)
+			importHypervVM(vmPath)
+		}
+	case "Parallels":
+		fmt.Println(vmPath)
+		if err := checkParallels(); err == nil {
+			importParallelsVM(vmPath)
 		}
 	default:
 		fmt.Printf("Hypervisor %s isn't supported.\n", hypervisor)
